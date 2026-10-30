@@ -99,6 +99,14 @@ interface PromoExtraida {
   direccionComercio?: string | null;
 }
 
+// Google AI Studio (tier gratis) limita gemini-flash-lite a 15 pedidos por
+// minuto. Con ~20 comercios en la lista, hay que espaciar los pedidos para
+// no chocar contra ese límite — 4.5s de pausa entre cada uno deja margen
+// de sobra (13 pedidos/min como máximo).
+const PAUSA_ENTRE_COMERCIOS_MS = 4500;
+
+export const maxDuration = 120; // en Vercel Hobby el default (300s) alcanza de sobra, pero lo dejamos explícito.
+
 export async function GET(req: NextRequest) {
   const auth = req.headers.get("authorization");
   if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -114,7 +122,8 @@ export async function GET(req: NextRequest) {
   const supabase = createServiceRoleClient();
   const resumen: { rubro: string; cadena: string; resultado: string }[] = [];
 
-  for (const { rubro, cadena, subcategoria, generica } of CADENAS_CONOCIDAS_V1) {
+  for (const [indice, { rubro, cadena, subcategoria, generica }] of CADENAS_CONOCIDAS_V1.entries()) {
+    if (indice > 0) await new Promise((r) => setTimeout(r, PAUSA_ENTRE_COMERCIOS_MS));
     try {
       const resultadosWeb = await buscarResultadosWeb(rubro, cadena, generica);
       if (resultadosWeb.length === 0) {
