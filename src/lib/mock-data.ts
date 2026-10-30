@@ -43,6 +43,7 @@ export const PROMOCIONES: Promocion[] = [
     fechaDetectada: "2026-10-30",
     fechaFin: "2026-12-31",
     activa: true,
+    fuenteUrl: null,
     distanciaKm: 1.2,
   },
   {
@@ -59,6 +60,7 @@ export const PROMOCIONES: Promocion[] = [
     fechaDetectada: "2026-10-30",
     fechaFin: "2026-11-30",
     activa: true,
+    fuenteUrl: null,
     distanciaKm: 3.8,
   },
   {
@@ -75,6 +77,7 @@ export const PROMOCIONES: Promocion[] = [
     fechaDetectada: "2026-10-27",
     fechaFin: "2026-11-10",
     activa: true,
+    fuenteUrl: null,
     distanciaKm: 2.6,
   },
   {
@@ -91,6 +94,7 @@ export const PROMOCIONES: Promocion[] = [
     fechaDetectada: "2026-10-29",
     fechaFin: "2026-11-15",
     activa: true,
+    fuenteUrl: null,
     distanciaKm: 2.1,
   },
   {
@@ -107,6 +111,7 @@ export const PROMOCIONES: Promocion[] = [
     fechaDetectada: "2026-10-28",
     fechaFin: "2026-11-20",
     activa: true,
+    fuenteUrl: null,
     distanciaKm: 4.4,
   },
   {
@@ -123,6 +128,7 @@ export const PROMOCIONES: Promocion[] = [
     fechaDetectada: "2026-10-28",
     fechaFin: "2026-11-30",
     activa: true,
+    fuenteUrl: null,
     distanciaKm: 0.6,
   },
   {
@@ -139,6 +145,7 @@ export const PROMOCIONES: Promocion[] = [
     fechaDetectada: "2026-10-30",
     fechaFin: "2026-12-15",
     activa: true,
+    fuenteUrl: null,
     distanciaKm: 5.1,
   },
 ];
