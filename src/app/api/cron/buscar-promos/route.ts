@@ -142,11 +142,17 @@ export async function GET(req: NextRequest) {
         resumen.push({ rubro, cadena, resultado: "sin promo vigente detectada" });
         continue;
       }
+      // Búsqueda genérica sin un comercio real identificado: mejor no
+      // guardar nada que guardar una tarjeta bajo el nombre de la
+      // categoría (ej. "Verdulerías de Rosario"), que no dice qué local es.
+      if (generica && !promo.nombreComercio?.trim()) {
+        resumen.push({ rubro, cadena, resultado: "sin comercio específico identificado" });
+        continue;
+      }
 
-      const nombreGuardado =
-        generica && promo.nombreComercio?.trim() ? promo.nombreComercio.trim() : cadena;
-      const direccionGuardada = generica ? promo.direccionComercio?.trim() || null : null;
-      const telefonoGuardado = generica ? normalizarTelefono(promo.telefonoComercio) : null;
+      const nombreGuardado = generica ? promo.nombreComercio!.trim() : cadena;
+      const direccionGuardada = promo.direccionComercio?.trim() || null;
+      const telefonoGuardado = normalizarTelefono(promo.telefonoComercio);
       await guardarPromo(supabase, {
         rubro,
         cadena: nombreGuardado,
@@ -261,6 +267,9 @@ No inventes datos que no estén en el texto: un campo que no se pueda confirmar 
 ${contexto}
 
 Tarea: si estos resultados describen una promoción vigente y concreta (no vencida), devolvé sus datos. ${exigenciaEspecificidad}
+Además, completá si podés:
+- "direccionComercio": dirección de "${cadena}" en Rosario, si el texto la menciona (calle y altura, o al menos el barrio); si "${cadena}" tiene varias sucursales en Rosario y el texto no aclara cuál, poné "Todas las sucursales en Rosario"; null si no hay ninguna pista.
+- "telefonoComercio": teléfono o WhatsApp de "${cadena}" en Rosario, si aparece en el texto; null si no aparece. No inventes uno.
 Si no hay ninguna promoción clara y vigente, devolvé {"encontrada": false}.
 No inventes datos que no estén en el texto: un campo que no se pueda confirmar va en null.`;
 
@@ -284,12 +293,12 @@ No inventes datos que no estén en el texto: un campo que no se pueda confirmar 
       direccionComercio: {
         type: "string",
         nullable: true,
-        description: "Dirección del comercio, si se menciona (solo si la búsqueda es por categoría)",
+        description: "Dirección del comercio, si se menciona en el texto",
       },
       telefonoComercio: {
         type: "string",
         nullable: true,
-        description: "Teléfono o WhatsApp del comercio, si se menciona (solo si la búsqueda es por categoría)",
+        description: "Teléfono o WhatsApp del comercio, si se menciona en el texto",
       },
     },
     required: ["encontrada"],
