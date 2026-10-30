@@ -23,6 +23,15 @@ interface CadenaConocida {
   cadena: string;
   /** Solo para Indumentaria: deportiva | formal | casual */
   subcategoria?: string;
+  /**
+   * true cuando "cadena" no es una marca puntual sino una categoría de
+   * búsqueda (ej. "Carnicerías de Rosario"). En ese caso no se guarda ese
+   * texto como nombre del comercio: se le pide al LLM que identifique el
+   * negocio real y concreto que aparece en los resultados, y se usa ese
+   * nombre — así cada comercio queda bien identificado (y puede tener su
+   * propio logo más adelante) en vez de agruparse todos bajo un genérico.
+   */
+  generica?: boolean;
 }
 
 const CADENAS_CONOCIDAS_V1: CadenaConocida[] = [
@@ -35,8 +44,8 @@ const CADENAS_CONOCIDAS_V1: CadenaConocida[] = [
   { rubro: "Combustible", cadena: "YPF" },
   { rubro: "Combustible", cadena: "Shell" },
   { rubro: "Combustible", cadena: "Axion" },
-  { rubro: "Carnicerías", cadena: "Carnicerías de Rosario" },
-  { rubro: "Verdulerías", cadena: "Verdulerías de Rosario" },
+  { rubro: "Carnicerías", cadena: "Carnicerías de Rosario", generica: true },
+  { rubro: "Verdulerías", cadena: "Verdulerías de Rosario", generica: true },
   { rubro: "Gimnasios", cadena: "Megatlon" },
   { rubro: "Gimnasios", cadena: "Sport Club" },
   { rubro: "Gastronomía", cadena: "La Montada Resto Bar" },
@@ -44,7 +53,7 @@ const CADENAS_CONOCIDAS_V1: CadenaConocida[] = [
   { rubro: "Farmacias", cadena: "Vantage" },
   { rubro: "Electrodomésticos y Tecnología", cadena: "Megatone" },
   { rubro: "Electrodomésticos y Tecnología", cadena: "Fravega" },
-  { rubro: "Mascotas", cadena: "Veterinarias y petshops de Rosario" },
+  { rubro: "Mascotas", cadena: "Veterinarias y petshops de Rosario", generica: true },
   { rubro: "Delivery", cadena: "PedidosYa" },
   { rubro: "Delivery", cadena: "Rappi" },
 ];
@@ -84,6 +93,8 @@ interface PromoExtraida {
   topeReintegro?: number | null;
   fechaFin?: string | null; // YYYY-MM-DD
   fuenteUrl?: string | null;
+  /** Solo se le pide al LLM en búsquedas "genéricas" (ver CadenaConocida.generica). */
+  nombreComercio?: string | null;
 }
 
 export async function GET(req: NextRequest) {
@@ -101,22 +112,24 @@ export async function GET(req: NextRequest) {
   const supabase = createServiceRoleClient();
   const resumen: { rubro: string; cadena: string; resultado: string }[] = [];
 
-  for (const { rubro, cadena, subcategoria } of CADENAS_CONOCIDAS_V1) {
+  for (const { rubro, cadena, subcategoria, generica } of CADENAS_CONOCIDAS_V1) {
     try {
-      const resultadosWeb = await buscarResultadosWeb(rubro, cadena);
+      const resultadosWeb = await buscarResultadosWeb(rubro, cadena, generica);
       if (resultadosWeb.length === 0) {
         resumen.push({ rubro, cadena, resultado: "sin resultados de búsqueda" });
         continue;
       }
 
-      const promo = await extraerPromoConLLM(rubro, cadena, resultadosWeb);
+      const promo = await extraerPromoConLLM(rubro, cadena, resultadosWeb, generica);
       if (!promo.encontrada) {
         resumen.push({ rubro, cadena, resultado: "sin promo vigente detectada" });
         continue;
       }
 
-      await guardarPromo(supabase, { rubro, cadena, subcategoria, promo });
-      resumen.push({ rubro, cadena, resultado: "promo guardada" });
+      const nombreGuardado =
+        generica && promo.nombreComercio?.trim() ? promo.nombreComercio.trim() : cadena;
+      await guardarPromo(supabase, { rubro, cadena: nombreGuardado, subcategoria, promo });
+      resumen.push({ rubro, cadena: nombreGuardado, resultado: "promo guardada" });
     } catch (err) {
       console.error(`[cron] error con ${cadena} (${rubro}):`, err);
       resumen.push({ rubro, cadena, resultado: `error: ${(err as Error).message}` });
@@ -127,14 +140,25 @@ export async function GET(req: NextRequest) {
 }
 
 /** Búsqueda web con Tavily (https://tavily.com) — tier gratis: 1000/mes. */
-async function buscarResultadosWeb(rubro: string, cadena: string): Promise<ResultadoWeb[]> {
-  // Combustible: los descuentos casi siempre dependen de banco/tarjeta y día
-  // de la semana — una consulta genérica trae notas viejas o genéricas que
-  // Gemini después descarta por "no concretas". Apuntamos directo a eso.
-  const query =
-    rubro === "Combustible"
-      ? `descuento "${cadena}" nafta combustible Rosario con qué tarjeta o banco, qué día, qué porcentaje`
-      : `promoción descuento "${cadena}" ${rubro} Rosario Santa Fe este mes`;
+async function buscarResultadosWeb(
+  rubro: string,
+  cadena: string,
+  generica?: boolean
+): Promise<ResultadoWeb[]> {
+  let query: string;
+  if (generica) {
+    // Búsqueda por categoría, no por marca: NO se cita "cadena" entre
+    // comillas (sería buscar ese texto literal) — se busca un comercio
+    // real y puntual del rubro con una promo concreta.
+    query = `promoción descuento ${rubro.toLowerCase()} Rosario este mes nombre del local`;
+  } else if (rubro === "Combustible") {
+    // Combustible: los descuentos casi siempre dependen de banco/tarjeta y
+    // día de la semana — una consulta genérica trae notas viejas o
+    // genéricas que Gemini después descarta por "no concretas".
+    query = `descuento "${cadena}" nafta combustible Rosario con qué tarjeta o banco, qué día, qué porcentaje`;
+  } else {
+    query = `promoción descuento "${cadena}" ${rubro} Rosario Santa Fe este mes`;
+  }
 
   const res = await fetchConTimeout("https://api.tavily.com/search", {
     method: "POST",
@@ -166,14 +190,22 @@ async function buscarResultadosWeb(rubro: string, cadena: string): Promise<Resul
 async function extraerPromoConLLM(
   rubro: string,
   cadena: string,
-  resultadosWeb: ResultadoWeb[]
+  resultadosWeb: ResultadoWeb[],
+  generica?: boolean
 ): Promise<PromoExtraida> {
   const hoy = new Date().toISOString().slice(0, 10);
   const contexto = resultadosWeb
     .map((r, i) => `[Fuente ${i + 1}: ${r.url}]\n${r.contenido}`)
     .join("\n\n");
 
-  const prompt = `Hoy es ${hoy}. Los siguientes son resultados de una búsqueda web sobre promociones/descuentos de "${cadena}" (rubro: ${rubro}) en Rosario, Argentina.
+  const prompt = generica
+    ? `Hoy es ${hoy}. Los siguientes son resultados de una búsqueda web sobre promociones/descuentos de comercios del rubro "${rubro}" en Rosario, Argentina (búsqueda por categoría, no por una marca puntual).
+
+${contexto}
+
+Tarea: si estos resultados describen una promoción vigente y concreta (no genérica, no vencida) de UN comercio real y específico, devolvé sus datos, incluyendo "nombreComercio" con el nombre propio de ese negocio tal como aparece en el texto (ej. "Carnicería Don José", nunca una descripción genérica como "varias carnicerías"). Si no hay ninguna promoción clara, vigente y de un comercio identificable, devolvé {"encontrada": false}.
+No inventes datos que no estén en el texto: un campo que no se pueda confirmar va en null.`
+    : `Hoy es ${hoy}. Los siguientes son resultados de una búsqueda web sobre promociones/descuentos de "${cadena}" (rubro: ${rubro}) en Rosario, Argentina.
 
 ${contexto}
 
@@ -192,6 +224,11 @@ No inventes datos que no estén en el texto: un campo que no se pueda confirmar 
       topeReintegro: { type: "number", nullable: true },
       fechaFin: { type: "string", nullable: true, description: "Formato YYYY-MM-DD" },
       fuenteUrl: { type: "string", nullable: true },
+      nombreComercio: {
+        type: "string",
+        nullable: true,
+        description: "Nombre propio y específico del comercio (solo si la búsqueda es por categoría, no por una marca puntual)",
+      },
     },
     required: ["encontrada"],
   };
