@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ComercioLogo } from "@/components/ComercioLogo";
 import { IconCalendar, IconCard, IconChevronRight, IconPin } from "@/components/icons";
+import { WhatsappLink } from "@/components/WhatsappLink";
 import { promoValidaHoy } from "@/lib/dias";
 import { formatDiaMes } from "@/lib/fechas";
 import { logosComercio } from "@/lib/logo";
@@ -86,6 +87,11 @@ export function PromoCard({
               <IconCalendar className="h-3 w-3" /> {rangoFechas}
             </span>
           )}
+          <WhatsappLink
+            telefono={promo.comercio.telefono}
+            nombreComercio={promo.comercio.nombre}
+            className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-1.5 py-0.5 font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+          />
         </p>
       </div>
       <IconChevronRight className="h-5 w-5 shrink-0 text-neutral-300 dark:text-neutral-600" />

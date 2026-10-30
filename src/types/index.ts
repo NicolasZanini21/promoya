@@ -10,6 +10,8 @@ export interface Comercio {
   nombre: string;
   rubroId: string;
   direccion: string | null;
+  /** Solo lo tienen los comercios de barrio/chicos (no las cadenas grandes). */
+  telefono: string | null;
   lat: number | null;
   lng: number | null;
 }

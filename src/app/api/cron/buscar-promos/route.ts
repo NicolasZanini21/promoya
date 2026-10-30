@@ -97,6 +97,12 @@ interface PromoExtraida {
   nombreComercio?: string | null;
   /** Idem nombreComercio: dirección del local, solo en búsquedas genéricas. */
   direccionComercio?: string | null;
+  /**
+   * WhatsApp del negocio, solo en búsquedas genéricas (comercios de
+   * barrio/chicos — las cadenas grandes no lo necesitan, ya tienen web).
+   * Formato libre tal como aparece en el texto; se normaliza después.
+   */
+  telefonoComercio?: string | null;
 }
 
 // Google AI Studio (tier gratis) limita gemini-flash-lite a 15 pedidos por
@@ -140,11 +146,13 @@ export async function GET(req: NextRequest) {
       const nombreGuardado =
         generica && promo.nombreComercio?.trim() ? promo.nombreComercio.trim() : cadena;
       const direccionGuardada = generica ? promo.direccionComercio?.trim() || null : null;
+      const telefonoGuardado = generica ? normalizarTelefono(promo.telefonoComercio) : null;
       await guardarPromo(supabase, {
         rubro,
         cadena: nombreGuardado,
         subcategoria,
         direccion: direccionGuardada,
+        telefono: telefonoGuardado,
         promo,
       });
       resumen.push({ rubro, cadena: nombreGuardado, resultado: "promo guardada" });
@@ -155,6 +163,24 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json({ ok: true, resumen });
+}
+
+/**
+ * Convierte un teléfono tal como lo escribió el LLM (puede venir con
+ * espacios, guiones, "0341-", "+54 9 341...", etc.) a solo dígitos con
+ * código de país, listo para un link wa.me. Si no parece un teléfono
+ * argentino con al menos 10 dígitos locales, devuelve null en vez de
+ * guardar algo roto.
+ */
+function normalizarTelefono(crudo: string | null | undefined): string | null {
+  if (!crudo) return null;
+  const soloDigitos = crudo.replace(/\D/g, "");
+  if (soloDigitos.length < 10) return null;
+  if (soloDigitos.startsWith("54")) return soloDigitos;
+  // Local tipo "0341 15 1234567" o "341 1234567": le agrega 549 (código de
+  // Argentina + celular) y sacamos el 0 inicial si lo tiene.
+  const sinCero = soloDigitos.replace(/^0/, "");
+  return `549${sinCero}`;
 }
 
 /** Búsqueda web con Tavily (https://tavily.com) — tier gratis: 1000/mes. */
@@ -225,7 +251,8 @@ ${contexto}
 
 Tarea: si estos resultados describen una promoción vigente y concreta (no vencida) de UN comercio real y específico, devolvé sus datos:
 - "nombreComercio": el nombre propio de ese negocio tal como aparece en el texto (ej. "Carnicería Don José", nunca una descripción genérica como "varias carnicerías").
-- "direccionComercio": su dirección si el texto la menciona (calle y altura, o barrio si no hay más detalle); si no aparece, null.
+- "direccionComercio": SIEMPRE completá este campo de alguna forma, nunca lo dejes vacío sin intentarlo: si el texto da una dirección puntual (calle y altura, o al menos el barrio), usala tal cual; si el comercio tiene varias sucursales en Rosario y el texto no aclara cuál, poné "Todas las sucursales en Rosario"; null solo si el texto no da ninguna pista de ubicación.
+- "telefonoComercio": si el texto menciona un número de teléfono o WhatsApp de ese comercio, copialo tal cual aparece (con o sin 0341, con o sin +54); si no aparece ningún número, null. No inventes uno.
 ${exigenciaEspecificidad}
 Si no hay ninguna promoción clara, vigente y de un comercio identificable, devolvé {"encontrada": false}.
 No inventes datos que no estén en el texto: un campo que no se pueda confirmar va en null.`
@@ -258,6 +285,11 @@ No inventes datos que no estén en el texto: un campo que no se pueda confirmar 
         type: "string",
         nullable: true,
         description: "Dirección del comercio, si se menciona (solo si la búsqueda es por categoría)",
+      },
+      telefonoComercio: {
+        type: "string",
+        nullable: true,
+        description: "Teléfono o WhatsApp del comercio, si se menciona (solo si la búsqueda es por categoría)",
       },
     },
     required: ["encontrada"],
@@ -318,12 +350,14 @@ async function guardarPromo(
     cadena,
     subcategoria,
     direccion,
+    telefono,
     promo,
   }: {
     rubro: string;
     cadena: string;
     subcategoria?: string;
     direccion?: string | null;
+    telefono?: string | null;
     promo: PromoExtraida;
   }
 ) {
@@ -336,7 +370,7 @@ async function guardarPromo(
 
   let { data: comercioRow } = await supabase
     .from("comercio")
-    .select("id")
+    .select("id, direccion, telefono")
     .eq("nombre", cadena)
     .eq("rubro_id", rubroRow.id)
     .maybeSingle();
@@ -349,11 +383,22 @@ async function guardarPromo(
         rubro_id: rubroRow.id,
         subcategoria: subcategoria ?? null,
         direccion: direccion ?? null,
+        telefono: telefono ?? null,
       })
-      .select("id")
+      .select("id, direccion, telefono")
       .single();
     if (errComercio) throw errComercio;
     comercioRow = nuevoComercio;
+  } else {
+    // El comercio ya existía (de una corrida anterior): si hoy conseguimos
+    // dirección/teléfono y antes no los tenía, los completamos — nunca
+    // borramos un dato bueno que ya estaba guardado con uno vacío de hoy.
+    const actualizacion: Record<string, string> = {};
+    if (direccion && !comercioRow.direccion) actualizacion.direccion = direccion;
+    if (telefono && !comercioRow.telefono) actualizacion.telefono = telefono;
+    if (Object.keys(actualizacion).length > 0) {
+      await supabase.from("comercio").update(actualizacion).eq("id", comercioRow.id);
+    }
   }
 
   let metodoPagoId: string | null = null;

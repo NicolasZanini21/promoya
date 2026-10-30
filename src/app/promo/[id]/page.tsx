@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ComercioLogo } from "@/components/ComercioLogo";
 import { IconArrowLeft, IconPin } from "@/components/icons";
+import { WhatsappLink } from "@/components/WhatsappLink";
 import { formatDiaMes } from "@/lib/fechas";
 import { logosComercio } from "@/lib/logo";
 import { fetchPromocionPorId } from "@/lib/promos";
@@ -54,6 +55,11 @@ export default async function PromoDetallePage({
               {promo.comercio.nombre}
             </h1>
             <p className="text-sm text-white/80">{promo.rubro.nombre}</p>
+            <WhatsappLink
+              telefono={promo.comercio.telefono}
+              nombreComercio={promo.comercio.nombre}
+              className="mt-1 inline-flex items-center gap-1 rounded-full bg-white/20 px-2 py-0.5 text-xs font-medium"
+            />
           </div>
         </div>
 

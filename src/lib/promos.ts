@@ -12,6 +12,7 @@ interface ComercioRow {
   nombre: string;
   rubro_id: string;
   direccion: string | null;
+  telefono: string | null;
   lat: number | null;
   lng: number | null;
   rubro: { id: string; nombre: string } | null;
@@ -35,7 +36,7 @@ interface PromocionRow {
 const SELECT_PROMOCION = `
   id, descuento_porcentaje, descuento_monto, condiciones, tope_reintegro,
   dias_validos, fecha_detectada, fecha_fin, activa, fuente_url,
-  comercio:comercio_id ( id, nombre, rubro_id, direccion, lat, lng,
+  comercio:comercio_id ( id, nombre, rubro_id, direccion, telefono, lat, lng,
     rubro:rubro_id ( id, nombre ) ),
   metodo_pago_requerido:metodo_pago_requerido_id ( id, nombre )
 `;
@@ -50,6 +51,7 @@ function mapPromocion(row: PromocionRow): Promocion | null {
     nombre: row.comercio.nombre,
     rubroId: row.comercio.rubro_id,
     direccion: row.comercio.direccion,
+    telefono: row.comercio.telefono,
     lat: row.comercio.lat,
     lng: row.comercio.lng,
   };

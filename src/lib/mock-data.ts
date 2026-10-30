@@ -19,13 +19,13 @@ export const METODOS_PAGO: MetodoPago[] = [
 ];
 
 const COMERCIOS: Comercio[] = [
-  { id: "c1", nombre: "Carrefour Pellegrini", rubroId: "r1", direccion: "Av. Pellegrini al 1500, Rosario", lat: -32.9477, lng: -60.6573 },
-  { id: "c2", nombre: "Día % Alberdi", rubroId: "r1", direccion: "Av. Alberdi al 2200, Rosario", lat: -32.9245, lng: -60.6612 },
-  { id: "c3", nombre: "Vea Echesortu", rubroId: "r1", direccion: "Av. Francia al 1600, Rosario", lat: -32.9336, lng: -60.6702 },
-  { id: "c4", nombre: "Portsaid Rosario", rubroId: "r2", direccion: "San Martín al 850, peatonal", lat: -32.9412, lng: -60.6505 },
-  { id: "c5", nombre: "Taverniti Alto Rosario", rubroId: "r2", direccion: "Av. Junín al 501, Alto Rosario", lat: -32.9268, lng: -60.6495 },
-  { id: "c6", nombre: "La Montada Resto Bar", rubroId: "r3", direccion: "Bv. Oroño al 1100, Rosario", lat: -32.9529, lng: -60.6498 },
-  { id: "c7", nombre: "Davis Resto", rubroId: "r3", direccion: "Av. de la Costa al 900, Rosario", lat: -32.9381, lng: -60.6389 },
+  { id: "c1", nombre: "Carrefour Pellegrini", rubroId: "r1", direccion: "Av. Pellegrini al 1500, Rosario", telefono: null, lat: -32.9477, lng: -60.6573 },
+  { id: "c2", nombre: "Día % Alberdi", rubroId: "r1", direccion: "Av. Alberdi al 2200, Rosario", telefono: null, lat: -32.9245, lng: -60.6612 },
+  { id: "c3", nombre: "Vea Echesortu", rubroId: "r1", direccion: "Av. Francia al 1600, Rosario", telefono: null, lat: -32.9336, lng: -60.6702 },
+  { id: "c4", nombre: "Portsaid Rosario", rubroId: "r2", direccion: "San Martín al 850, peatonal", telefono: null, lat: -32.9412, lng: -60.6505 },
+  { id: "c5", nombre: "Taverniti Alto Rosario", rubroId: "r2", direccion: "Av. Junín al 501, Alto Rosario", telefono: null, lat: -32.9268, lng: -60.6495 },
+  { id: "c6", nombre: "La Montada Resto Bar", rubroId: "r3", direccion: "Bv. Oroño al 1100, Rosario", telefono: null, lat: -32.9529, lng: -60.6498 },
+  { id: "c7", nombre: "Davis Resto", rubroId: "r3", direccion: "Av. de la Costa al 900, Rosario", telefono: null, lat: -32.9381, lng: -60.6389 },
 ];
 
 export const PROMOCIONES: Promocion[] = [

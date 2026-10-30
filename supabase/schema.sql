@@ -17,13 +17,18 @@ create table if not exists comercio (
   -- Solo se usa hoy para Indumentaria: 'deportiva' | 'formal' | 'casual'
   subcategoria text,
   direccion text,
+  -- WhatsApp del negocio (solo lo tienen los comercios de barrio/chicos,
+  -- no las cadenas grandes), en formato internacional sin "+" ni espacios
+  -- (ej. "5493411234567"), listo para armar un link wa.me.
+  telefono text,
   lat double precision,
   lng double precision
 );
 create index if not exists comercio_rubro_idx on comercio(rubro_id);
 
--- Por si la tabla ya existía de antes de que se agregara esta columna.
+-- Por si la tabla ya existía de antes de que se agregaron estas columnas.
 alter table comercio add column if not exists subcategoria text;
+alter table comercio add column if not exists telefono text;
 
 -- Métodos de pago (tarjeta de tal banco, efectivo, billetera virtual, etc.)
 create table if not exists metodo_pago (
