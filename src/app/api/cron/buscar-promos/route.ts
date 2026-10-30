@@ -128,7 +128,13 @@ export async function GET(req: NextRequest) {
 
 /** Búsqueda web con Tavily (https://tavily.com) — tier gratis: 1000/mes. */
 async function buscarResultadosWeb(rubro: string, cadena: string): Promise<ResultadoWeb[]> {
-  const query = `promoción descuento "${cadena}" ${rubro} Rosario Santa Fe este mes`;
+  // Combustible: los descuentos casi siempre dependen de banco/tarjeta y día
+  // de la semana — una consulta genérica trae notas viejas o genéricas que
+  // Gemini después descarta por "no concretas". Apuntamos directo a eso.
+  const query =
+    rubro === "Combustible"
+      ? `descuento "${cadena}" nafta combustible Rosario con qué tarjeta o banco, qué día, qué porcentaje`
+      : `promoción descuento "${cadena}" ${rubro} Rosario Santa Fe este mes`;
 
   const res = await fetchConTimeout("https://api.tavily.com/search", {
     method: "POST",
@@ -136,7 +142,10 @@ async function buscarResultadosWeb(rubro: string, cadena: string): Promise<Resul
     body: JSON.stringify({
       api_key: process.env.TAVILY_API_KEY,
       query,
-      search_depth: "basic",
+      // "advanced" trae contenido más completo y relevante que "basic" —
+      // clave para rubros como Combustible, donde el dato concreto (banco,
+      // día, %) suele estar más adentro de la página, no en el resumen.
+      search_depth: "advanced",
       max_results: 5,
       include_answer: false,
     }),
@@ -150,7 +159,7 @@ async function buscarResultadosWeb(rubro: string, cadena: string): Promise<Resul
   const resultados: { url: string; content: string }[] = data.results ?? [];
   return resultados
     .filter((r) => r.content && r.content.trim().length > 0)
-    .map((r) => ({ url: r.url, contenido: r.content.slice(0, 1500) }));
+    .map((r) => ({ url: r.url, contenido: r.content.slice(0, 3000) }));
 }
 
 /** Extracción estructurada con Gemini Flash (tier gratis de Google AI Studio). */
