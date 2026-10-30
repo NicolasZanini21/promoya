@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { ComercioLogo } from "@/components/ComercioLogo";
 import { IconArrowLeft, IconPin } from "@/components/icons";
 import { formatDiaMes } from "@/lib/fechas";
-import { logoUrlComercio } from "@/lib/logo";
+import { logosComercio } from "@/lib/logo";
 import { fetchPromocionPorId } from "@/lib/promos";
 import { colorRubro } from "@/lib/rubro-colors";
 import { createClient } from "@/lib/supabase/server";
@@ -47,7 +47,7 @@ export default async function PromoDetallePage({
           <div>
             <h1 className="flex items-center gap-2 text-lg font-semibold">
               <ComercioLogo
-                src={logoUrlComercio(promo.comercio.nombre, promo.fuenteUrl)}
+                srcs={logosComercio(promo.comercio.nombre, promo.fuenteUrl)}
                 alt=""
                 className="h-5 w-5 rounded-sm bg-white/90 object-contain p-0.5"
               />

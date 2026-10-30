@@ -3,7 +3,7 @@ import { ComercioLogo } from "@/components/ComercioLogo";
 import { IconCalendar, IconCard, IconChevronRight, IconPin } from "@/components/icons";
 import { promoValidaHoy } from "@/lib/dias";
 import { formatDiaMes } from "@/lib/fechas";
-import { logoUrlComercio } from "@/lib/logo";
+import { logosComercio } from "@/lib/logo";
 import { colorRubro } from "@/lib/rubro-colors";
 import type { Promocion } from "@/types";
 
@@ -52,7 +52,7 @@ export function PromoCard({
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
           <ComercioLogo
-            src={logoUrlComercio(promo.comercio.nombre, promo.fuenteUrl)}
+            srcs={logosComercio(promo.comercio.nombre, promo.fuenteUrl)}
             alt=""
             className="h-4 w-4 shrink-0 rounded-sm object-contain"
           />

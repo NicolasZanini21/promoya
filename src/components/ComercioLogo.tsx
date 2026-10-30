@@ -3,30 +3,34 @@
 import { useState } from "react";
 
 /**
- * Logo del comercio con fallback silencioso: si la imagen no carga (no hay
- * fuente, el dominio no tiene favicon, etc.) simplemente no muestra nada en
- * vez de un ícono roto.
+ * Logo del comercio con fallback en cadena: prueba cada URL de `srcs` en
+ * orden (típicamente: dominio oficial fijo primero, después el de
+ * fuente_url) y si una falla pasa a la siguiente. Si no hay ninguna que
+ * cargue, no muestra nada en vez de un ícono roto.
  */
 export function ComercioLogo({
-  src,
+  srcs,
   alt,
   className,
 }: {
-  src: string | null;
+  srcs: (string | null)[];
   alt: string;
   className?: string;
 }) {
-  const [error, setError] = useState(false);
-  if (!src || error) return null;
+  const candidatos = srcs.filter((s): s is string => Boolean(s));
+  const [indice, setIndice] = useState(0);
+
+  if (indice >= candidatos.length) return null;
 
   // eslint-disable-next-line @next/next/no-img-element -- dominio externo arbitrario, no se puede usar next/image sin configurar cada host a mano
   return (
     <img
-      src={src}
+      key={candidatos[indice]}
+      src={candidatos[indice]}
       alt={alt}
       className={className}
       loading="lazy"
-      onError={() => setError(true)}
+      onError={() => setIndice((i) => i + 1)}
     />
   );
 }

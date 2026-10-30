@@ -95,6 +95,8 @@ interface PromoExtraida {
   fuenteUrl?: string | null;
   /** Solo se le pide al LLM en búsquedas "genéricas" (ver CadenaConocida.generica). */
   nombreComercio?: string | null;
+  /** Idem nombreComercio: dirección del local, solo en búsquedas genéricas. */
+  direccionComercio?: string | null;
 }
 
 export async function GET(req: NextRequest) {
@@ -128,7 +130,14 @@ export async function GET(req: NextRequest) {
 
       const nombreGuardado =
         generica && promo.nombreComercio?.trim() ? promo.nombreComercio.trim() : cadena;
-      await guardarPromo(supabase, { rubro, cadena: nombreGuardado, subcategoria, promo });
+      const direccionGuardada = generica ? promo.direccionComercio?.trim() || null : null;
+      await guardarPromo(supabase, {
+        rubro,
+        cadena: nombreGuardado,
+        subcategoria,
+        direccion: direccionGuardada,
+        promo,
+      });
       resumen.push({ rubro, cadena: nombreGuardado, resultado: "promo guardada" });
     } catch (err) {
       console.error(`[cron] error con ${cadena} (${rubro}):`, err);
@@ -198,18 +207,25 @@ async function extraerPromoConLLM(
     .map((r, i) => `[Fuente ${i + 1}: ${r.url}]\n${r.contenido}`)
     .join("\n\n");
 
+  const exigenciaEspecificidad = `Una promoción es "concreta" solo si incluye al menos un dato puntual además del %: a qué productos/categorías aplica (ej. "heladeras y lavarropas", no "productos seleccionados" sin ejemplos), o con qué banco/tarjeta, o qué día. Si el texto es vago y no da NINGÚN detalle puntual más allá del porcentaje (ej. solo dice "hasta 40% en productos seleccionados" sin decir cuáles), tratala como no concreta y devolvé {"encontrada": false} — mejor no mostrar nada que mostrar algo inútil para decidir.`;
+
   const prompt = generica
     ? `Hoy es ${hoy}. Los siguientes son resultados de una búsqueda web sobre promociones/descuentos de comercios del rubro "${rubro}" en Rosario, Argentina (búsqueda por categoría, no por una marca puntual).
 
 ${contexto}
 
-Tarea: si estos resultados describen una promoción vigente y concreta (no genérica, no vencida) de UN comercio real y específico, devolvé sus datos, incluyendo "nombreComercio" con el nombre propio de ese negocio tal como aparece en el texto (ej. "Carnicería Don José", nunca una descripción genérica como "varias carnicerías"). Si no hay ninguna promoción clara, vigente y de un comercio identificable, devolvé {"encontrada": false}.
+Tarea: si estos resultados describen una promoción vigente y concreta (no vencida) de UN comercio real y específico, devolvé sus datos:
+- "nombreComercio": el nombre propio de ese negocio tal como aparece en el texto (ej. "Carnicería Don José", nunca una descripción genérica como "varias carnicerías").
+- "direccionComercio": su dirección si el texto la menciona (calle y altura, o barrio si no hay más detalle); si no aparece, null.
+${exigenciaEspecificidad}
+Si no hay ninguna promoción clara, vigente y de un comercio identificable, devolvé {"encontrada": false}.
 No inventes datos que no estén en el texto: un campo que no se pueda confirmar va en null.`
     : `Hoy es ${hoy}. Los siguientes son resultados de una búsqueda web sobre promociones/descuentos de "${cadena}" (rubro: ${rubro}) en Rosario, Argentina.
 
 ${contexto}
 
-Tarea: si estos resultados describen una promoción vigente y concreta (no genérica, no vencida), devolvé sus datos. Si no hay ninguna promoción clara y vigente, devolvé {"encontrada": false}.
+Tarea: si estos resultados describen una promoción vigente y concreta (no vencida), devolvé sus datos. ${exigenciaEspecificidad}
+Si no hay ninguna promoción clara y vigente, devolvé {"encontrada": false}.
 No inventes datos que no estén en el texto: un campo que no se pueda confirmar va en null.`;
 
   const schema = {
@@ -228,6 +244,11 @@ No inventes datos que no estén en el texto: un campo que no se pueda confirmar 
         type: "string",
         nullable: true,
         description: "Nombre propio y específico del comercio (solo si la búsqueda es por categoría, no por una marca puntual)",
+      },
+      direccionComercio: {
+        type: "string",
+        nullable: true,
+        description: "Dirección del comercio, si se menciona (solo si la búsqueda es por categoría)",
       },
     },
     required: ["encontrada"],
@@ -287,8 +308,15 @@ async function guardarPromo(
     rubro,
     cadena,
     subcategoria,
+    direccion,
     promo,
-  }: { rubro: string; cadena: string; subcategoria?: string; promo: PromoExtraida }
+  }: {
+    rubro: string;
+    cadena: string;
+    subcategoria?: string;
+    direccion?: string | null;
+    promo: PromoExtraida;
+  }
 ) {
   const { data: rubroRow, error: errRubro } = await supabase
     .from("rubro")
@@ -307,7 +335,12 @@ async function guardarPromo(
   if (!comercioRow) {
     const { data: nuevoComercio, error: errComercio } = await supabase
       .from("comercio")
-      .insert({ nombre: cadena, rubro_id: rubroRow.id, subcategoria: subcategoria ?? null })
+      .insert({
+        nombre: cadena,
+        rubro_id: rubroRow.id,
+        subcategoria: subcategoria ?? null,
+        direccion: direccion ?? null,
+      })
       .select("id")
       .single();
     if (errComercio) throw errComercio;
@@ -335,15 +368,17 @@ async function guardarPromo(
     }
   }
 
-  // Evita duplicar: si ya hay una promo activa para este comercio con las
-  // mismas condiciones, se actualiza en vez de insertar una nueva fila.
-  const { data: existente } = await supabase
+  // Evita duplicar: cada comercio tiene como máximo UNA promo activa a la
+  // vez (se actualiza cada día, no se acumulan filas por pequeñas
+  // diferencias de redacción entre una corrida y otra). Si por una corrida
+  // vieja ya quedaron varias activas para el mismo comercio, se actualiza
+  // la más reciente y se desactivan las demás (limpieza automática).
+  const { data: existentes } = await supabase
     .from("promocion")
     .select("id")
     .eq("comercio_id", comercioRow.id)
     .eq("activa", true)
-    .eq("condiciones", promo.condiciones ?? "")
-    .maybeSingle();
+    .order("fecha_detectada", { ascending: false });
 
   const payload = {
     comercio_id: comercioRow.id,
@@ -358,9 +393,16 @@ async function guardarPromo(
     activa: true,
   };
 
-  if (existente) {
-    const { error } = await supabase.from("promocion").update(payload).eq("id", existente.id);
+  if (existentes && existentes.length > 0) {
+    const [masReciente, ...duplicadas] = existentes;
+    const { error } = await supabase.from("promocion").update(payload).eq("id", masReciente.id);
     if (error) throw error;
+    if (duplicadas.length > 0) {
+      await supabase
+        .from("promocion")
+        .update({ activa: false })
+        .in("id", duplicadas.map((d) => d.id));
+    }
   } else {
     const { error } = await supabase
       .from("promocion")
