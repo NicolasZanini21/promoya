@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/buscar-promos",
+      "schedule": "0 9 * * *"
+    }
+  ]
+}
