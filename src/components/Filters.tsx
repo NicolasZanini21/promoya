@@ -11,21 +11,28 @@ interface FiltersProps {
   onRubroChange: (id: string | null) => void;
   onMetodoChange: (id: string | null) => void;
   onOrdenChange: (orden: OrdenPromos) => void;
+  /** true dentro del panel lateral de celular: lista vertical, sin scroll
+   * horizontal, aunque el viewport sea chico (ver MobileFiltersDrawer). */
+  vertical?: boolean;
 }
 
 function Chip({
   activo,
   onClick,
+  vertical,
   children,
 }: {
   activo: boolean;
   onClick: () => void;
+  vertical?: boolean;
   children: React.ReactNode;
 }) {
   return (
     <button
       onClick={onClick}
-      className={`shrink-0 whitespace-nowrap rounded-full border px-3 py-1.5 text-left text-sm font-medium transition md:whitespace-normal ${
+      className={`shrink-0 rounded-full border px-3 py-1.5 text-left text-sm font-medium transition ${
+        vertical ? "whitespace-normal" : "whitespace-nowrap md:whitespace-normal"
+      } ${
         activo
           ? "border-transparent bg-gradient-to-r from-brand-500 to-accent-500 text-white shadow-sm"
           : "border-neutral-200 bg-white text-neutral-600 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300"
@@ -51,15 +58,20 @@ export function Filters({
   onRubroChange,
   onMetodoChange,
   onOrdenChange,
+  vertical = false,
 }: FiltersProps) {
+  const filaClasses = vertical
+    ? "flex flex-col flex-wrap gap-2"
+    : "flex gap-2 overflow-x-auto pb-1 md:flex-col md:overflow-visible";
+
   return (
     <div className="flex flex-col gap-4 md:gap-6">
       <div>
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-400">
           Rubro
         </p>
-        <div className="flex gap-2 overflow-x-auto pb-1 md:flex-col md:overflow-visible">
-          <Chip activo={rubroSeleccionado === null} onClick={() => onRubroChange(null)}>
+        <div className={filaClasses}>
+          <Chip activo={rubroSeleccionado === null} onClick={() => onRubroChange(null)} vertical={vertical}>
             Todos
           </Chip>
           {rubros.map((r) => (
@@ -67,6 +79,7 @@ export function Filters({
               key={r.id}
               activo={rubroSeleccionado === r.id}
               onClick={() => onRubroChange(r.id)}
+              vertical={vertical}
             >
               {r.nombre}
             </Chip>
@@ -78,8 +91,8 @@ export function Filters({
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-400">
           Método de pago
         </p>
-        <div className="flex gap-2 overflow-x-auto pb-1 md:flex-col md:overflow-visible">
-          <Chip activo={metodoSeleccionado === null} onClick={() => onMetodoChange(null)}>
+        <div className={filaClasses}>
+          <Chip activo={metodoSeleccionado === null} onClick={() => onMetodoChange(null)} vertical={vertical}>
             Todos
           </Chip>
           {metodosPago.map((m) => (
@@ -87,6 +100,7 @@ export function Filters({
               key={m.id}
               activo={metodoSeleccionado === m.id}
               onClick={() => onMetodoChange(m.id)}
+              vertical={vertical}
             >
               {m.nombre}
             </Chip>

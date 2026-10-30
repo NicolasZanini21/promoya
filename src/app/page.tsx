@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Filters } from "@/components/Filters";
+import { MobileFiltersDrawer } from "@/components/MobileFiltersDrawer";
 import { PromoCard } from "@/components/PromoCard";
 import { SaludoHeader } from "@/components/SaludoHeader";
 import { useAppState } from "@/lib/app-state";
@@ -92,10 +93,7 @@ export default function InicioPage() {
 
   return (
     <div className="mx-auto flex max-w-6xl gap-8 px-4 py-6 md:px-8 md:py-10">
-      <aside className="w-full md:w-56 md:shrink-0">
-        <div className="md:hidden">
-          <SaludoHeader />
-        </div>
+      <aside className="hidden md:block md:w-56 md:shrink-0">
         <Filters
           rubros={rubros}
           metodosPago={metodosPago}
@@ -109,11 +107,24 @@ export default function InicioPage() {
       </aside>
 
       <section className="flex-1">
+        <div className="md:hidden">
+          <SaludoHeader />
+        </div>
         <div className="hidden md:block">
           <SaludoHeader />
         </div>
         <div className="mb-4 flex items-center justify-between gap-3">
           <h1 className="hidden text-2xl font-semibold md:block">Promos en Rosario</h1>
+          <MobileFiltersDrawer
+            rubros={rubros}
+            metodosPago={metodosPago}
+            rubroSeleccionado={rubroId}
+            metodoSeleccionado={metodoId}
+            orden={orden}
+            onRubroChange={setRubroId}
+            onMetodoChange={setMetodoId}
+            onOrdenChange={setOrden}
+          />
           <div className="flex gap-1 rounded-full border border-neutral-200 bg-white p-1 dark:border-neutral-800 dark:bg-neutral-900">
             {OPCIONES_VISTA.map((o) => (
               <button

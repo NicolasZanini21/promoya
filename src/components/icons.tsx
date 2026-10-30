@@ -141,6 +141,24 @@ export function IconCalendar(props: IconProps) {
   );
 }
 
+export function IconFilter(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M4 5.5h16" />
+      <path d="M7.5 12h9" />
+      <path d="M10.5 18.5h3" />
+    </svg>
+  );
+}
+
+export function IconX(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M6 6l12 12M18 6 6 18" />
+    </svg>
+  );
+}
+
 export function IconPercent(props: IconProps) {
   return (
     <svg {...base} {...props}>
