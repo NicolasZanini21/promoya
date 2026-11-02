@@ -111,7 +111,10 @@ interface PromoExtraida {
 // de sobra (13 pedidos/min como máximo).
 const PAUSA_ENTRE_COMERCIOS_MS = 4500;
 
-export const maxDuration = 120; // en Vercel Hobby el default (300s) alcanza de sobra, pero lo dejamos explícito.
+// Con ~20 comercios, pausa de 4.5s entre cada uno + el tiempo real de
+// Tavily/Gemini por comercio puede superar fácil los 120s — el límite real
+// de Vercel Hobby es 300s, así que usamos casi todo ese margen.
+export const maxDuration = 280;
 
 export async function GET(req: NextRequest) {
   const auth = req.headers.get("authorization");
