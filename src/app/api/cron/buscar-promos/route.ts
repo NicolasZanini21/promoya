@@ -154,14 +154,31 @@ export async function GET(req: NextRequest) {
       }
 
       const nombreGuardado = generica ? promo.nombreComercio!.trim() : cadena;
-      const direccionGuardada = promo.direccionComercio?.trim() || null;
-      const telefonoGuardado = normalizarTelefono(promo.telefonoComercio);
+      let direccionGuardada = promo.direccionComercio?.trim() || null;
+      // WhatsApp solo tiene sentido en comercios chicos/de barrio (búsqueda
+      // "genérica"): una cadena grande como Shell o Carrefour tiene línea de
+      // atención al cliente, no un WhatsApp personal que vaya a contestar.
+      let telefonoGuardado = generica ? normalizarTelefono(promo.telefonoComercio) : null;
+      // La búsqueda por categoría a veces no trae dirección y/o teléfono
+      // del comercio puntual (la nota de la promo no los menciona, aunque
+      // el negocio sí los tenga publicados en otro lado, ej. Google o
+      // Instagram) — una vez identificado el nombre real, hacemos siempre
+      // una segunda búsqueda puntual para completar lo que falte y, de
+      // paso, detectar si tiene varias sucursales.
+      let sucursalesGuardadas: { nombre: string | null; direccion: string | null; telefono: string | null }[] = [];
+      if (generica) {
+        const datos = await buscarDatosFaltantesComercio(nombreGuardado, !direccionGuardada, !telefonoGuardado);
+        if (!direccionGuardada && datos.direccion) direccionGuardada = datos.direccion;
+        if (!telefonoGuardado && datos.telefono) telefonoGuardado = datos.telefono;
+        sucursalesGuardadas = datos.sucursales;
+      }
       await guardarPromo(supabase, {
         rubro,
         cadena: nombreGuardado,
         subcategoria,
         direccion: direccionGuardada,
         telefono: telefonoGuardado,
+        sucursales: sucursalesGuardadas,
         promo,
       });
       resumen.push({ rubro, cadena: nombreGuardado, resultado: "promo guardada" });
@@ -203,7 +220,9 @@ async function buscarResultadosWeb(
     // Búsqueda por categoría, no por marca: NO se cita "cadena" entre
     // comillas (sería buscar ese texto literal) — se busca un comercio
     // real y puntual del rubro con una promo concreta.
-    query = `promoción descuento ${rubro.toLowerCase()} Rosario este mes nombre del local`;
+    // "Rosario Santa Fe" (no solo "Rosario") para no confundir con otras
+    // localidades argentinas que también se llaman Rosario (Salta, etc.).
+    query = `promoción descuento ${rubro.toLowerCase()} Rosario Santa Fe Argentina este mes nombre, dirección y teléfono o WhatsApp del local`;
   } else if (rubro === "Combustible") {
     // Combustible: los descuentos casi siempre dependen de banco/tarjeta y
     // día de la semana — una consulta genérica trae notas viejas o
@@ -251,19 +270,23 @@ async function extraerPromoConLLM(
     .map((r, i) => `[Fuente ${i + 1}: ${r.url}]\n${r.contenido}`)
     .join("\n\n");
 
-  const exigenciaEspecificidad = `Una promoción es "concreta" solo si incluye al menos un dato puntual además del %: a qué productos/categorías aplica (ej. "heladeras y lavarropas", no "productos seleccionados" sin ejemplos), o con qué banco/tarjeta, o qué día. Si el texto es vago y no da NINGÚN detalle puntual más allá del porcentaje (ej. solo dice "hasta 40% en productos seleccionados" sin decir cuáles), tratala como no concreta y devolvé {"encontrada": false} — mejor no mostrar nada que mostrar algo inútil para decidir.`;
+  const exigenciaEspecificidad = `Una promoción es "concreta" solo si incluye al menos un dato puntual además del tipo de descuento (sea %, $, 2x1, combo, etc.): a qué productos/categorías aplica (ej. "heladeras y lavarropas" o "alimento balanceado para perros", nunca una categoría genérica como "productos seleccionados" o el rubro del comercio sin más detalle — ej. "2x1 en PetShop" NO alcanza, tiene que decir en qué productos del petshop), o con qué banco/tarjeta, o qué día. Si el texto es vago y no da NINGÚN detalle puntual más allá del tipo de descuento, tratala como no concreta y devolvé {"encontrada": false} — mejor no mostrar nada que mostrar algo inútil para decidir.
+
+Al armar "condiciones", redactá SIEMPRE en este orden cuando el dato esté disponible: (1) tipo y magnitud del descuento, (2) a qué productos/categorías puntuales aplica, (3) con qué método de pago (si hace falta uno en particular) o si es sin restricción de pago, (4) día/horario si aplica. Ejemplo bueno: "25% de descuento en alimento balanceado para perros y gatos, pagando con Banco Macro, los martes." Ejemplo malo (evitar): "Promoción 2x1 en PetShop" (no dice en qué productos).`;
 
   const prompt = generica
-    ? `Hoy es ${hoy}. Los siguientes son resultados de una búsqueda web sobre promociones/descuentos de comercios del rubro "${rubro}" en Rosario, Argentina (búsqueda por categoría, no por una marca puntual).
+    ? `Hoy es ${hoy}. Los siguientes son resultados de una búsqueda web sobre promociones/descuentos de comercios del rubro "${rubro}" en Rosario, Santa Fe, Argentina (búsqueda por categoría, no por una marca puntual).
 
 ${contexto}
 
-Tarea: si estos resultados describen una promoción vigente y concreta (no vencida) de UN comercio real y específico, devolvé sus datos:
-- "nombreComercio": el nombre propio de ese negocio tal como aparece en el texto (ej. "Carnicería Don José", nunca una descripción genérica como "varias carnicerías").
-- "direccionComercio": SIEMPRE completá este campo de alguna forma, nunca lo dejes vacío sin intentarlo: si el texto da una dirección puntual (calle y altura, o al menos el barrio), usala tal cual; si el comercio tiene varias sucursales en Rosario y el texto no aclara cuál, poné "Todas las sucursales en Rosario"; null solo si el texto no da ninguna pista de ubicación.
-- "telefonoComercio": si el texto menciona un número de teléfono o WhatsApp de ese comercio, copialo tal cual aparece (con o sin 0341, con o sin +54); si no aparece ningún número, null. No inventes uno.
+Verificación de ubicación OBLIGATORIA antes de cualquier otra cosa: Argentina tiene varias localidades llamadas "Rosario" (Rosario de Santa Fe es la ciudad grande que nos interesa, pero también existen Rosario de la Frontera y Rosario de Lerma en Salta, entre otras). Si el texto no deja en claro que el comercio está en Rosario, provincia de Santa Fe (por ejemplo porque menciona otra provincia, otro código de área telefónico, u otra ciudad), descartalo directamente: no lo tomes como válido aunque tenga una promoción concreta. Ante la duda, descartalo — es preferible no mostrar nada a mostrar un comercio que no está en Rosario.
+
+Tarea: si, pasada esa verificación, estos resultados describen una promoción vigente y concreta (no vencida) de UN comercio real, específico y confirmado en Rosario (Santa Fe), devolvé sus datos:
+- "nombreComercio": el nombre propio de ese negocio, copiado EXACTAMENTE letra por letra tal como aparece escrito en el texto (incluyendo mayúsculas, acentos y cómo esté escrito, ej. "Bistecca" y no "Bistecs" o "Bisteca") — nunca lo parafrasees, acortes ni corrijas de memoria, y nunca uses una descripción genérica como "varias carnicerías".
+- "direccionComercio": copiá la dirección SOLO si aparece literalmente en el texto (calle y altura, o al menos el barrio) — nunca la inventes ni la completes a partir de otro comercio con nombre parecido. Si el comercio tiene varias sucursales en Rosario y el texto no aclara cuál, poné "Todas las sucursales en Rosario". Si el texto no da ninguna dirección ni pista de ubicación dentro de Rosario, usá null.
+- "telefonoComercio": el teléfono o WhatsApp de ATENCIÓN DIRECTA de ese comercio puntual (no una línea general de la cadena ni un 0800), copiado tal cual aparece en el texto (con o sin 0341, con o sin +54); buscalo con atención, suele aparecer junto a la dirección o en el pie de la página. Si no aparece ningún número, null. No inventes uno.
 ${exigenciaEspecificidad}
-Si no hay ninguna promoción clara, vigente y de un comercio identificable, devolvé {"encontrada": false}.
+Si no hay ninguna promoción clara, vigente y de un comercio identificable y confirmado en Rosario (Santa Fe), devolvé {"encontrada": false}.
 No inventes datos que no estén en el texto: un campo que no se pueda confirmar va en null.`
     : `Hoy es ${hoy}. Los siguientes son resultados de una búsqueda web sobre promociones/descuentos de "${cadena}" (rubro: ${rubro}) en Rosario, Argentina.
 
@@ -272,7 +295,7 @@ ${contexto}
 Tarea: si estos resultados describen una promoción vigente y concreta (no vencida), devolvé sus datos. ${exigenciaEspecificidad}
 Además, completá si podés:
 - "direccionComercio": dirección de "${cadena}" en Rosario, si el texto la menciona (calle y altura, o al menos el barrio); si "${cadena}" tiene varias sucursales en Rosario y el texto no aclara cuál, poné "Todas las sucursales en Rosario"; null si no hay ninguna pista.
-- "telefonoComercio": teléfono o WhatsApp de "${cadena}" en Rosario, si aparece en el texto; null si no aparece. No inventes uno.
+No completes "telefonoComercio" para esta cadena: es un negocio grande, con línea de atención al cliente, no un WhatsApp personal — dejalo siempre en null.
 Si no hay ninguna promoción clara y vigente, devolvé {"encontrada": false}.
 No inventes datos que no estén en el texto: un campo que no se pueda confirmar va en null.`;
 
@@ -354,6 +377,129 @@ No inventes datos que no estén en el texto: un campo que no se pueda confirmar 
   }
 }
 
+interface SucursalExtraida {
+  nombre: string | null;
+  direccion: string | null;
+  telefono: string | null;
+}
+
+/**
+ * Segunda pasada, solo para comercios de barrio: busca específicamente la
+ * dirección y/o el teléfono/WhatsApp de ESE negocio puntual (la búsqueda
+ * por categoría de arriba a veces no los trae, aunque el comercio sí los
+ * tenga publicados en otro lado, ej. Google o Instagram), y de paso
+ * detecta si tiene varias sucursales con dirección/WhatsApp propios (ej.
+ * "Bistecca Centro", "Bistecca Alberdi"). Es best-effort: cualquier error
+ * acá no debe tirar abajo el guardado de la promo, así que nunca lanza.
+ */
+async function buscarDatosFaltantesComercio(
+  nombreComercio: string,
+  faltaDireccion: boolean,
+  faltaTelefono: boolean
+): Promise<{ direccion: string | null; telefono: string | null; sucursales: SucursalExtraida[] }> {
+  const vacio = { direccion: null, telefono: null, sucursales: [] };
+  try {
+    const res = await fetchConTimeout("https://api.tavily.com/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        api_key: process.env.TAVILY_API_KEY,
+        query: `"${nombreComercio}" Rosario sucursales dirección teléfono whatsapp contacto`,
+        search_depth: "basic",
+        max_results: 5,
+        include_answer: false,
+      }),
+    });
+    if (!res.ok) return vacio;
+
+    const data = await res.json();
+    const resultados: { url: string; content: string }[] = data.results ?? [];
+    const contexto = resultados
+      .filter((r) => r.content?.trim())
+      .map((r) => r.content.slice(0, 1200))
+      .join("\n\n");
+    if (!contexto.trim()) return vacio;
+
+    const pedidos = [
+      faltaDireccion
+        ? `- "direccion": la dirección de ESE negocio puntual en Rosario (calle y altura, o al menos el barrio) — si tiene una sola boca. Si tiene varias sucursales, dejá esto en null y usá "sucursales" en cambio.`
+        : "",
+      faltaTelefono
+        ? `- "telefono": el teléfono o WhatsApp de contacto de ESE negocio puntual, tal cual aparece — si tiene una sola boca. Si tiene varias sucursales, dejá esto en null y usá "sucursales" en cambio.`
+        : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent?key=${process.env.GEMINI_API_KEY}`;
+    const body = JSON.stringify({
+      contents: [
+        {
+          parts: [
+            {
+              text: `Los siguientes son resultados de una búsqueda web sobre el negocio "${nombreComercio}" en Rosario, Argentina.\n\n${contexto}\n\nTarea: devolvé estos datos SOLO si estás seguro de que son de ESE negocio puntual (no de otro con nombre parecido en otra ciudad):\n${pedidos}\n- "sucursales": SOLO si el texto deja en claro que el negocio tiene VARIAS bocas distintas en Rosario (ej. "Bistecca Centro", "Bistecca Alberdi"), devolvé un array con una entrada por sucursal — cada una con "nombre" (el barrio/zona que la distingue, ej. "Centro", "Alberdi"; null si no hay forma de distinguirla), "direccion" y "telefono" (cada uno null si no se confirma para esa sucursal puntual). Si el negocio tiene una sola boca, o no podés confirmar varias direcciones distintas, devolvé un array vacío.\nNo inventes nada: lo que no se pueda confirmar va en null, y ante la duda de si una dirección es de este negocio o de otro parecido, no la incluyas.`,
+            },
+          ],
+        },
+      ],
+      generationConfig: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: "object",
+          properties: {
+            direccion: { type: "string", nullable: true },
+            telefono: { type: "string", nullable: true },
+            sucursales: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  nombre: { type: "string", nullable: true },
+                  direccion: { type: "string", nullable: true },
+                  telefono: { type: "string", nullable: true },
+                },
+              },
+            },
+          },
+          required: [],
+        },
+        temperature: 0.1,
+      },
+    });
+
+    const resGemini = await fetchConTimeout(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+    });
+    if (!resGemini.ok) return vacio;
+
+    const dataGemini = await resGemini.json();
+    const texto = dataGemini.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!texto) return vacio;
+
+    const parseado = JSON.parse(texto) as {
+      direccion?: string | null;
+      telefono?: string | null;
+      sucursales?: { nombre?: string | null; direccion?: string | null; telefono?: string | null }[];
+    };
+    return {
+      direccion: parseado.direccion?.trim() || null,
+      telefono: normalizarTelefono(parseado.telefono),
+      sucursales: (parseado.sucursales ?? [])
+        .filter((s) => s.direccion?.trim() || s.telefono?.trim())
+        .map((s) => ({
+          nombre: s.nombre?.trim() || null,
+          direccion: s.direccion?.trim() || null,
+          telefono: normalizarTelefono(s.telefono),
+        })),
+    };
+  } catch (err) {
+    console.error(`[cron] no se pudieron buscar datos de "${nombreComercio}":`, err);
+    return vacio;
+  }
+}
+
 /** Upsert de comercio + metodo_pago + promocion en Supabase. */
 async function guardarPromo(
   supabase: ReturnType<typeof createServiceRoleClient>,
@@ -363,6 +509,7 @@ async function guardarPromo(
     subcategoria,
     direccion,
     telefono,
+    sucursales,
     promo,
   }: {
     rubro: string;
@@ -370,6 +517,7 @@ async function guardarPromo(
     subcategoria?: string;
     direccion?: string | null;
     telefono?: string | null;
+    sucursales?: SucursalExtraida[];
     promo: PromoExtraida;
   }
 ) {
@@ -411,6 +559,23 @@ async function guardarPromo(
     if (Object.keys(actualizacion).length > 0) {
       await supabase.from("comercio").update(actualizacion).eq("id", comercioRow.id);
     }
+  }
+
+  // Sucursales: si hoy encontramos una lista de bocas para este comercio,
+  // reemplaza lo que hubiera guardado (la lista completa es más confiable
+  // que ir acumulando entradas sueltas de corridas distintas). Si hoy no
+  // encontramos ninguna, se deja lo que ya había — no se borra por una
+  // búsqueda que no encontró nada esta vez.
+  if (sucursales && sucursales.length > 0) {
+    await supabase.from("sucursal").delete().eq("comercio_id", comercioRow.id);
+    await supabase.from("sucursal").insert(
+      sucursales.map((s) => ({
+        comercio_id: comercioRow!.id,
+        nombre: s.nombre,
+        direccion: s.direccion,
+        telefono: s.telefono,
+      }))
+    );
   }
 
   let metodoPagoId: string | null = null;

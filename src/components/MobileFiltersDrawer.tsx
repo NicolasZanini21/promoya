@@ -3,15 +3,18 @@
 import { useEffect, useState } from "react";
 import { Filters } from "@/components/Filters";
 import { IconFilter, IconX } from "@/components/icons";
+import type { CategoriaMetodoPago } from "@/lib/metodo-pago-categorias";
 import type { MetodoPago, OrdenPromos, Rubro } from "@/types";
 
 interface Props {
   rubros: Rubro[];
   metodosPago: MetodoPago[];
   rubroSeleccionado: string | null;
+  categoriaMetodoSeleccionada: CategoriaMetodoPago | null;
   metodoSeleccionado: string | null;
   orden: OrdenPromos;
   onRubroChange: (id: string | null) => void;
+  onCategoriaMetodoChange: (categoria: CategoriaMetodoPago | null) => void;
   onMetodoChange: (id: string | null) => void;
   onOrdenChange: (orden: OrdenPromos) => void;
 }
@@ -27,14 +30,16 @@ export function MobileFiltersDrawer({
   rubros,
   metodosPago,
   rubroSeleccionado,
+  categoriaMetodoSeleccionada,
   metodoSeleccionado,
   orden,
   onRubroChange,
+  onCategoriaMetodoChange,
   onMetodoChange,
   onOrdenChange,
 }: Props) {
   const [abierto, setAbierto] = useState(false);
-  const hayFiltrosActivos = rubroSeleccionado !== null || metodoSeleccionado !== null;
+  const hayFiltrosActivos = rubroSeleccionado !== null || categoriaMetodoSeleccionada !== null;
 
   // Evita que la página de atrás scrollee mientras el panel está abierto.
   useEffect(() => {
@@ -83,9 +88,11 @@ export function MobileFiltersDrawer({
                 rubros={rubros}
                 metodosPago={metodosPago}
                 rubroSeleccionado={rubroSeleccionado}
+                categoriaMetodoSeleccionada={categoriaMetodoSeleccionada}
                 metodoSeleccionado={metodoSeleccionado}
                 orden={orden}
                 onRubroChange={onRubroChange}
+                onCategoriaMetodoChange={onCategoriaMetodoChange}
                 onMetodoChange={onMetodoChange}
                 onOrdenChange={onOrdenChange}
                 vertical

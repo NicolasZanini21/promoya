@@ -8,6 +8,7 @@ import { SaludoHeader } from "@/components/SaludoHeader";
 import { useAppState } from "@/lib/app-state";
 import { promoValidaEstaSemana, promoValidaHoy, promoVencida } from "@/lib/dias";
 import { distanciaKm as calcularDistanciaKm } from "@/lib/geo";
+import { categorizarMetodoPago, type CategoriaMetodoPago } from "@/lib/metodo-pago-categorias";
 import { fetchMetodosPago, fetchPromocionesActivas, fetchRubros } from "@/lib/promos";
 import { createClient } from "@/lib/supabase/client";
 import type { MetodoPago, OrdenPromos, Promocion, Rubro } from "@/types";
@@ -30,6 +31,7 @@ const OPCIONES_VISTA: { value: Vista; label: string }[] = [
 export default function InicioPage() {
   const { perfil, listo } = useAppState();
   const [rubroId, setRubroId] = useState<string | null>(null);
+  const [categoriaMetodo, setCategoriaMetodo] = useState<CategoriaMetodoPago | null>(null);
   const [metodoId, setMetodoId] = useState<string | null>(null);
   const [orden, setOrden] = useState<OrdenPromos>("descuento");
   const [vista, setVista] = useState<Vista>("mes");
@@ -76,7 +78,19 @@ export default function InicioPage() {
     });
 
     if (rubroId) lista = lista.filter((p) => p.rubro.id === rubroId);
-    if (metodoId) lista = lista.filter((p) => p.metodoPagoRequerido?.id === metodoId);
+    // Refinamiento puntual (un banco/tarjeta específico, ej. "Visa") manda
+    // sobre la categoría general si está elegido; si no, filtra por
+    // categoría. El refinamiento es por texto (puede aparecer dentro de
+    // varias filas de metodo_pago distintas), no por id exacto.
+    if (metodoId) {
+      lista = lista.filter((p) =>
+        p.metodoPagoRequerido?.nombre.toLowerCase().includes(metodoId.toLowerCase())
+      );
+    } else if (categoriaMetodo) {
+      lista = lista.filter(
+        (p) => p.metodoPagoRequerido && categorizarMetodoPago(p.metodoPagoRequerido.nombre).includes(categoriaMetodo)
+      );
+    }
 
     return [...lista].sort((a, b) => {
       if (orden === "descuento") return (b.descuentoPorcentaje ?? 0) - (a.descuentoPorcentaje ?? 0);
@@ -89,7 +103,17 @@ export default function InicioPage() {
       if (aSuscripto !== bSuscripto) return aSuscripto - bSuscripto;
       return (b.descuentoPorcentaje ?? 0) - (a.descuentoPorcentaje ?? 0);
     });
-  }, [promociones, rubroId, metodoId, orden, vista, perfil.ubicacionActiva, perfil.ubicacion, perfil.rubrosSuscriptos]);
+  }, [
+    promociones,
+    rubroId,
+    categoriaMetodo,
+    metodoId,
+    orden,
+    vista,
+    perfil.ubicacionActiva,
+    perfil.ubicacion,
+    perfil.rubrosSuscriptos,
+  ]);
 
   return (
     <div className="mx-auto flex max-w-6xl gap-8 px-4 py-6 md:px-8 md:py-10">
@@ -98,9 +122,11 @@ export default function InicioPage() {
           rubros={rubros}
           metodosPago={metodosPago}
           rubroSeleccionado={rubroId}
+          categoriaMetodoSeleccionada={categoriaMetodo}
           metodoSeleccionado={metodoId}
           orden={orden}
           onRubroChange={setRubroId}
+          onCategoriaMetodoChange={setCategoriaMetodo}
           onMetodoChange={setMetodoId}
           onOrdenChange={setOrden}
         />
@@ -119,9 +145,11 @@ export default function InicioPage() {
             rubros={rubros}
             metodosPago={metodosPago}
             rubroSeleccionado={rubroId}
+            categoriaMetodoSeleccionada={categoriaMetodo}
             metodoSeleccionado={metodoId}
             orden={orden}
             onRubroChange={setRubroId}
+            onCategoriaMetodoChange={setCategoriaMetodo}
             onMetodoChange={setMetodoId}
             onOrdenChange={setOrden}
           />

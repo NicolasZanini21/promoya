@@ -25,7 +25,6 @@ export function WhatsappLink({
       href={`https://wa.me/${telefono}?text=${mensaje}`}
       target="_blank"
       rel="noopener noreferrer"
-      onClick={(e) => e.stopPropagation()}
       className={
         className ??
         "inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"

@@ -1,15 +1,26 @@
 "use client";
 
+import {
+  bancosEnTexto,
+  CATEGORIAS_CON_DESPLEGABLE,
+  CATEGORIAS_METODO_PAGO,
+  categorizarMetodoPago,
+  tarjetasEnTexto,
+  type CategoriaMetodoPago,
+} from "@/lib/metodo-pago-categorias";
 import type { MetodoPago, OrdenPromos, Rubro } from "@/types";
 
 interface FiltersProps {
   rubros: Rubro[];
   metodosPago: MetodoPago[];
   rubroSeleccionado: string | null;
+  categoriaMetodoSeleccionada: CategoriaMetodoPago | null;
+  /** Banco o tarjeta puntual elegido dentro de la categoría (ej. "Banco Macro", "Visa"). */
   metodoSeleccionado: string | null;
   orden: OrdenPromos;
   onRubroChange: (id: string | null) => void;
-  onMetodoChange: (id: string | null) => void;
+  onCategoriaMetodoChange: (categoria: CategoriaMetodoPago | null) => void;
+  onMetodoChange: (opcion: string | null) => void;
   onOrdenChange: (orden: OrdenPromos) => void;
   /** true dentro del panel lateral de celular: lista vertical, sin scroll
    * horizontal, aunque el viewport sea chico (ver MobileFiltersDrawer). */
@@ -48,14 +59,23 @@ function Chip({
  * acomoda como panel vertical (dentro del aside de la página de Inicio);
  * en celular, como fila de chips con scroll horizontal arriba de la lista.
  * Ver spec: "Diseño para escritorio y celular".
+ *
+ * El filtro de método de pago es de dos niveles: categorías generales
+ * (Efectivo, Transferencia, Bancos, Tarjetas de crédito, Otros); "Bancos" y
+ * "Tarjetas de crédito" además abren un desplegable, pero con una lista
+ * CERRADA de bancos/tarjetas reales de Argentina (ver
+ * lib/metodo-pago-categorias.ts) — no con lo que sea que haya extraído el
+ * bot ese día, para no terminar con decenas de chips raros.
  */
 export function Filters({
   rubros,
   metodosPago,
   rubroSeleccionado,
+  categoriaMetodoSeleccionada,
   metodoSeleccionado,
   orden,
   onRubroChange,
+  onCategoriaMetodoChange,
   onMetodoChange,
   onOrdenChange,
   vertical = false,
@@ -63,6 +83,30 @@ export function Filters({
   const filaClasses = vertical
     ? "flex flex-col flex-wrap gap-2"
     : "flex gap-2 overflow-x-auto pb-1 md:flex-col md:overflow-visible";
+
+  // Solo se ofrecen como chips los bancos/tarjetas de la lista cerrada que
+  // realmente aparecen en alguna promo activa — no la lista completa
+  // siempre, para no mostrar opciones sin ningún resultado.
+  const opcionesDesplegable = (() => {
+    if (categoriaMetodoSeleccionada === "Bancos") {
+      const vistos = new Set<string>();
+      metodosPago.forEach((m) => bancosEnTexto(m.nombre).forEach((b) => vistos.add(b)));
+      return [...vistos].sort();
+    }
+    if (categoriaMetodoSeleccionada === "Tarjetas de crédito") {
+      const vistos = new Set<string>();
+      metodosPago.forEach((m) => tarjetasEnTexto(m.nombre).forEach((t) => vistos.add(t)));
+      return [...vistos].sort();
+    }
+    return [];
+  })();
+
+  const etiquetaTodos =
+    categoriaMetodoSeleccionada === "Bancos"
+      ? "Todos los bancos"
+      : categoriaMetodoSeleccionada === "Tarjetas de crédito"
+      ? "Todas las tarjetas"
+      : "Todos";
 
   return (
     <div className="flex flex-col gap-4 md:gap-6">
@@ -92,20 +136,51 @@ export function Filters({
           Método de pago
         </p>
         <div className={filaClasses}>
-          <Chip activo={metodoSeleccionado === null} onClick={() => onMetodoChange(null)} vertical={vertical}>
-            Todos
+          <Chip
+            activo={categoriaMetodoSeleccionada === null}
+            onClick={() => {
+              onCategoriaMetodoChange(null);
+              onMetodoChange(null);
+            }}
+            vertical={vertical}
+          >
+            Todos los medios de pago
           </Chip>
-          {metodosPago.map((m) => (
+          {CATEGORIAS_METODO_PAGO.map((c) => (
             <Chip
-              key={m.id}
-              activo={metodoSeleccionado === m.id}
-              onClick={() => onMetodoChange(m.id)}
+              key={c}
+              activo={categoriaMetodoSeleccionada === c}
+              onClick={() => {
+                onCategoriaMetodoChange(c);
+                onMetodoChange(null); // cambiar de categoría resetea el banco/tarjeta puntual elegido
+              }}
               vertical={vertical}
             >
-              {m.nombre}
+              {c}
             </Chip>
           ))}
         </div>
+
+        {/* Desplegable con bancos/tarjetas reales, solo si la categoría elegida tiene opciones para mostrar. */}
+        {categoriaMetodoSeleccionada &&
+          CATEGORIAS_CON_DESPLEGABLE.includes(categoriaMetodoSeleccionada) &&
+          opcionesDesplegable.length > 0 && (
+            <div className={`mt-2 border-l-2 border-neutral-100 pl-3 dark:border-neutral-800 ${filaClasses}`}>
+              <Chip activo={metodoSeleccionado === null} onClick={() => onMetodoChange(null)} vertical={vertical}>
+                {etiquetaTodos}
+              </Chip>
+              {opcionesDesplegable.map((opcion) => (
+                <Chip
+                  key={opcion}
+                  activo={metodoSeleccionado === opcion}
+                  onClick={() => onMetodoChange(opcion)}
+                  vertical={vertical}
+                >
+                  {opcion}
+                </Chip>
+              ))}
+            </div>
+          )}
       </div>
 
       <div>

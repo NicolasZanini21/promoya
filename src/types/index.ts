@@ -5,6 +5,13 @@ export interface Rubro {
   nombre: string;
 }
 
+export interface Sucursal {
+  id: string;
+  nombre: string | null;
+  direccion: string | null;
+  telefono: string | null;
+}
+
 export interface Comercio {
   id: string;
   nombre: string;
@@ -14,6 +21,8 @@ export interface Comercio {
   telefono: string | null;
   lat: number | null;
   lng: number | null;
+  /** Si tiene varias bocas, cada una con su propia dirección/WhatsApp (ver tabla sucursal). Vacío si tiene una sola. */
+  sucursales: Sucursal[];
 }
 
 export interface MetodoPago {

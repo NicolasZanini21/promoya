@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Comercio, MetodoPago, Promocion, Rubro } from "@/types";
+import type { Comercio, MetodoPago, Promocion, Rubro, Sucursal } from "@/types";
 
 // Consultas a Supabase que arman los tipos de @/types a partir de las
 // tablas reales (promocion + comercio + rubro + metodo_pago). Se usan tanto
@@ -16,6 +16,7 @@ interface ComercioRow {
   lat: number | null;
   lng: number | null;
   rubro: { id: string; nombre: string } | null;
+  sucursal: { id: string; nombre: string | null; direccion: string | null; telefono: string | null }[] | null;
 }
 
 interface PromocionRow {
@@ -37,7 +38,8 @@ const SELECT_PROMOCION = `
   id, descuento_porcentaje, descuento_monto, condiciones, tope_reintegro,
   dias_validos, fecha_detectada, fecha_fin, activa, fuente_url,
   comercio:comercio_id ( id, nombre, rubro_id, direccion, telefono, lat, lng,
-    rubro:rubro_id ( id, nombre ) ),
+    rubro:rubro_id ( id, nombre ),
+    sucursal ( id, nombre, direccion, telefono ) ),
   metodo_pago_requerido:metodo_pago_requerido_id ( id, nombre )
 `;
 
@@ -45,6 +47,13 @@ function mapPromocion(row: PromocionRow): Promocion | null {
   // Si el comercio o el rubro no se pudieron resolver (dato inconsistente),
   // se descarta en vez de mostrar una tarjeta rota.
   if (!row.comercio || !row.comercio.rubro) return null;
+
+  const sucursales: Sucursal[] = (row.comercio.sucursal ?? []).map((s) => ({
+    id: s.id,
+    nombre: s.nombre,
+    direccion: s.direccion,
+    telefono: s.telefono,
+  }));
 
   const comercio: Comercio = {
     id: row.comercio.id,
@@ -54,6 +63,7 @@ function mapPromocion(row: PromocionRow): Promocion | null {
     telefono: row.comercio.telefono,
     lat: row.comercio.lat,
     lng: row.comercio.lng,
+    sucursales,
   };
   const rubro: Rubro = row.comercio.rubro;
 

@@ -30,6 +30,19 @@ create index if not exists comercio_rubro_idx on comercio(rubro_id);
 alter table comercio add column if not exists subcategoria text;
 alter table comercio add column if not exists telefono text;
 
+-- Sucursales de un comercio con varias bocas (ej. "Bistecca Centro",
+-- "Bistecca Alberdi"), cada una con su propia dirección y WhatsApp. Un
+-- comercio sin fila acá se sigue mostrando con comercio.direccion /
+-- comercio.telefono como hasta ahora (ver lib/promos.ts).
+create table if not exists sucursal (
+  id uuid primary key default gen_random_uuid(),
+  comercio_id uuid not null references comercio(id) on delete cascade,
+  nombre text, -- ej. "Centro", "Alberdi" — null si no se pudo distinguir
+  direccion text,
+  telefono text
+);
+create index if not exists sucursal_comercio_idx on sucursal(comercio_id);
+
 -- Métodos de pago (tarjeta de tal banco, efectivo, billetera virtual, etc.)
 create table if not exists metodo_pago (
   id uuid primary key default gen_random_uuid(),
@@ -159,9 +172,10 @@ create policy "usuario ve sus notificaciones"
   on notificacion for select
   using (usuario_id in (select id from usuario where auth_user_id = auth.uid()));
 
--- Rubro, comercio, metodo_pago y promocion son de lectura pública (catálogo)
+-- Rubro, comercio, sucursal, metodo_pago y promocion son de lectura pública (catálogo)
 alter table rubro enable row level security;
 alter table comercio enable row level security;
+alter table sucursal enable row level security;
 alter table metodo_pago enable row level security;
 alter table promocion enable row level security;
 
@@ -169,6 +183,8 @@ drop policy if exists "catalogo rubro lectura publica" on rubro;
 create policy "catalogo rubro lectura publica" on rubro for select using (true);
 drop policy if exists "catalogo comercio lectura publica" on comercio;
 create policy "catalogo comercio lectura publica" on comercio for select using (true);
+drop policy if exists "catalogo sucursal lectura publica" on sucursal;
+create policy "catalogo sucursal lectura publica" on sucursal for select using (true);
 drop policy if exists "catalogo metodo_pago lectura publica" on metodo_pago;
 create policy "catalogo metodo_pago lectura publica" on metodo_pago for select using (true);
 drop policy if exists "catalogo promocion lectura publica" on promocion;
